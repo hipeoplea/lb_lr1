@@ -274,20 +274,25 @@ GitHub не передаёт секреты репозитория в запро
    ![SAST](docs/screenshots/sast-report.png)
    ![SCA](docs/screenshots/sca-report.png)
    ~~~
-5. После нового push дождитесь **нового** успешного запуска и сдавайте ссылку на него. Каждый push создаёт новый запуск.
+5. Сохраните README и отправьте скриншоты в репозиторий:
+
+   ~~~bash
+   git add README.md docs/screenshots/sast-report.png docs/screenshots/sca-report.png
+   git commit -m "Add security scan screenshots"
+   git push
+   ~~~
+
+6. После этого push дождитесь **нового** успешного запуска и сдавайте ссылку на него. Каждый push создаёт новый запуск.
 
 В текущем локальном каталоге невозможно получить достоверные скриншоты вкладки Actions или ссылку на её успешный запуск до публикации проекта.
 
 ## Как создать публичный репозиторий и отправить проект
 
-Локальный Git уже инициализирован. На GitHub создайте **пустой публичный репозиторий** без автоматического README, .gitignore и лицензии. В терминале из папки с pom.xml выполните, заменив примерный URL своим:
+Локальный Git уже инициализирован, проект закоммичен в ветке `main`. На GitHub создайте **пустой публичный репозиторий** без автоматического README, .gitignore и лицензии. В терминале из папки с pom.xml выполните, заменив примерный URL своим:
 
 ~~~bash
 git status
-git branch -M main
 git remote add origin https://github.com/<ВАШ_ЛОГИН>/<ИМЯ_РЕПОЗИТОРИЯ>.git
-git add .
-git commit -m "Migrate secure API to Maven"
 ~~~
 
 Затем добавьте **NVD_API_KEY** в Settings репозитория, как описано выше. После этого отправьте код:
@@ -296,7 +301,7 @@ git commit -m "Migrate secure API to Maven"
 git push -u origin main
 ~~~
 
-Если git commit сообщает **nothing to commit**, это нормально: переходите к git push. Если у репозитория уже есть origin, посмотрите его командой **git remote -v** и при необходимости измените через **git remote set-url origin <НОВЫЙ_URL>**.
+Если у репозитория уже есть origin, посмотрите его командой **git remote -v** и при необходимости измените через **git remote set-url origin <НОВЫЙ_URL>**.
 
 GitHub может запросить вход через браузер или токен доступа. После push перейдите на страницу репозитория, проверьте файлы и вкладку **Actions**. Если секрет NVD был добавлен позже первого push, запустите workflow вручную.
 
