@@ -1,0 +1,138 @@
+# Защищенный REST API (Java + Spring Boot)
+
+Учебное REST API на Java 17, Spring Boot, Spring Security и H2. Пользователь регистрируется, получает JWT после входа, а затем обращается к защищенным данным и управляет своими заметками.
+
+> База H2 работает в памяти: при перезапуске приложения пользователи и заметки удаляются. Проект предназначен для обучения, а не для промышленного размещения без дополнительной настройки.
+
+## Требования
+
+- JDK 17 или новее;
+- Git;
+- доступ в интернет при первой сборке Gradle и обновлении базы уязвимостей OWASP Dependency-Check.
+
+## Запуск локально
+
+Из корня проекта создайте случайный ключ JWT (он не записывается в репозиторий) и запустите приложение:
+
+```bash
+export JWT_SECRET_BASE64="$(openssl rand -base64 32)"
+./gradlew bootRun
+```
+
+Сервер слушает `http://localhost:8080`. Каждый новый запуск использует новую H2 базу, поэтому сначала зарегистрируйте пользователя.
+
+## API
+
+Все запросы и ответы используют JSON. Кроме регистрации и входа, каждому методу `/api/**` нужен заголовок `Authorization: Bearer <JWT>`. Токен действителен 15 минут.
+
+### `POST /auth/register` — создать пользователя
+
+```bash
+curl -i http://localhost:8080/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"student1","password":"long-unique-password-1"}'
+```
+
+Пароль должен содержать от 12 до 72 символов. Допустимые символы логина: латинские буквы, цифры, точка, дефис и подчеркивание. При успешной регистрации сервер вернет `201 Created`; повторный логин — `409 Conflict`.
+
+### `POST /auth/login` — войти и получить JWT
+
+```bash
+curl -sS http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"student1","password":"long-unique-password-1"}'
+```
+
+Успешный ответ содержит `accessToken`, тип `Bearer`, время жизни в секундах и имя пользователя. Неверная пара логин/пароль возвращает `401 Unauthorized` с общей ошибкой.
+
+Для следующих команд сохраните токен в переменную текущего терминала:
+
+```bash
+TOKEN="$(curl -sS http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"student1","password":"long-unique-password-1"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')"
+```
+
+### `GET /api/data` — получить учебные данные
+
+```bash
+curl -i http://localhost:8080/api/data \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### `POST /api/notes` — создать свою заметку
+
+```bash
+curl -i http://localhost:8080/api/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Моя заметка","content":"Текст заметки"}'
+```
+
+`GET /api/notes` с тем же заголовком возвращает не более 100 последних заметок только текущего пользователя.
+
+### Проверить отказ без токена
+
+```bash
+curl -i http://localhost:8080/api/data
+```
+
+Ожидаемый статус — `401 Unauthorized`. Тесты также проверяют регистрацию, вход, доступ с JWT, отказ без токена и экранирование HTML.
+
+## Реализованные меры защиты
+
+- **SQL-инъекции:** все запросы к H2 выполняются через `JdbcTemplate` с параметрами `?`. Ввод логина, владельца заметки и текст заметки передается отдельно от SQL. Динамическая конкатенация пользовательских данных в SQL не используется.
+- **XSS:** пользовательские заголовок и текст заметки, а также имя пользователя HTML-экранируются через `HtmlUtils.htmlEscape` перед выдачей в JSON. Например, `<script>` будет возвращен как `&lt;script&gt;`. Ответы имеют тип JSON, включен заголовок `X-Content-Type-Options: nosniff`.
+- **Пароли:** хранится только BCrypt-хэш с cost factor 12. Пароль не возвращается API; для неизвестного логина выполняется сравнение с фиктивным хэшем, а сообщение об ошибке входа не раскрывает, существует ли такой пользователь.
+- **Аутентификация и авторизация:** Spring Security выдает и проверяет подписанные HMAC-SHA256 JWT, проверяет подпись, срок действия и issuer. Токены живут 15 минут. Сессии не используются; методы `/api/**` закрыты по умолчанию. Секрет подписи задается переменной окружения `JWT_SECRET_BASE64`, в исходниках его нет.
+- **Проверка ввода:** Bean Validation ограничивает длину и формат логина, пароля, заголовка и текста заметки. Для паролей учитывается 72-байтовый лимит BCrypt.
+- **Ошибки:** ошибки авторизации и проверки ввода не включают SQL, stack trace или значения паролей.
+
+## CI/CD и отчеты безопасности
+
+Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) запускается при каждом `push`, `pull_request` и вручную из вкладки Actions. Он собирает проект и выполняет тесты, SpotBugs (SAST) и OWASP Dependency-Check (SCA). Dependency-Check завершает сборку ошибкой, если обнаружена уязвимость с CVSS 7.0 или выше. SARIF-отчет SpotBugs и HTML-отчет Dependency-Check загружаются в запуск как артефакт `security-scan-reports`.
+
+Чтобы Dependency-Check мог надежно получать свежую базу NVD, создайте API key на сайте NVD, затем в репозитории откройте **Settings → Secrets and variables → Actions → New repository secret** и добавьте секрет `NVD_API_KEY`. Ключ не добавляйте в код или README. Без ключа первая загрузка базы может идти долго или упереться в лимит NVD.
+
+Локально те же проверки можно запустить так (для Dependency-Check рекомендуется предварительно задать `NVD_API_KEY`):
+
+```bash
+./gradlew test
+./gradlew spotbugsMain dependencyCheckAnalyze
+```
+
+Отчеты появятся в `build/reports/spotbugs/` и `build/reports/dependency-check/`. Первое обновление базы CVE требует интернета.
+
+### Скриншоты и ссылка на успешный запуск
+
+Я не могу создать достоверные скриншоты вкладки GitHub Actions, пока проект не загружен в ваш аккаунт. После первого успешного запуска:
+
+1. Откройте публичный репозиторий → **Actions** → последний зеленый запуск `Secure REST API CI`.
+2. Скачайте артефакт `security-scan-reports`; откройте отчет SpotBugs и HTML-отчет Dependency-Check.
+3. Сделайте скриншоты завершенных проверок и поместите их в `docs/screenshots/sast-report.png` и `docs/screenshots/sca-report.png`, затем закоммитьте их. Не подписывайте отчет как «уязвимостей нет», если сканер что-либо обнаружил: укажите итог и устраните или обоснованно разберите находки.
+4. Вставьте в README URL публичного репозитория и ссылку на этот зеленый запуск Actions.
+
+## Создать публичный GitHub-репозиторий
+
+Создайте на GitHub новый **публичный пустой** репозиторий без README, `.gitignore` и лицензии. Затем в терминале из папки проекта выполните:
+
+```bash
+git init
+git add .
+git commit -m "Build secure Spring REST API"
+git branch -M main
+git remote add origin https://github.com/<ВАШ_ЛОГИН>/<ИМЯ_РЕПОЗИТОРИЯ>.git
+git push -u origin main
+```
+
+Замените URL на адрес созданного репозитория. После push проверьте вкладку **Actions**. В разделе **Code → Security → Code scanning** SpotBugs-отчет появится только если отдельно включить загрузку SARIF в GitHub Code Scanning; сейчас он гарантированно сохраняется как артефакт запуска. Ссылка на последний успешный запуск будет иметь вид `https://github.com/<ВАШ_ЛОГИН>/<ИМЯ_РЕПОЗИТОРИЯ>/actions/runs/<ID>`.
+
+## Скриншоты
+
+Добавьте реальные скриншоты отчетов после запуска CI в публичном репозитории. Их нельзя подменять локально нарисованными результатами.
+
+<!-- После добавления реальных изображений раскомментируйте ссылки:
+![SpotBugs SAST report](docs/screenshots/sast-report.png)
+![OWASP Dependency-Check SCA report](docs/screenshots/sca-report.png)
+-->
