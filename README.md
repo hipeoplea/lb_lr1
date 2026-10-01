@@ -15,7 +15,7 @@
 
 ## Инициализация проекта
 
-Для данного проекта был создан репозиторий Git, который был связан с репозиторием на GitHub. Ссылка на репозиторий: https://github.com/hipeoplea/lb_lr1
+Для данного проекта был создан репозиторий Git, который был связан с публичным репозиторием на GitHub: [hipeoplea/lb_lr1](https://github.com/hipeoplea/lb_lr1).
 
 ## Описание проекта
 
@@ -122,9 +122,19 @@ API возвращает JSON и не формирует HTML-страницы. 
 Spring Security работает без HTTP-сессии. Открыты только `/auth/register` и `/auth/login`; остальные адреса требуют Bearer JWT. OAuth2 Resource Server проверяет подпись, срок действия и `issuer`. Контроллер получает подтверждённого пользователя из токена, а сервис создаёт и читает записи только этого пользователя. Клиент не передаёт владельца записи в запросе.
 
 ## Отчёты SAST и SCA из Actions
-Отчет SAST:
 
-![SAST - SpotBugs](docs/screenshots/SAST.png)  
-Отчет SCA:
+Workflow запускает интеграционные тесты, SpotBugs для SAST и OWASP Dependency-Check для SCA при `push` и `pull request`. Последний подтверждённый успешный запуск — [GitHub Actions, 30.09.2026](https://github.com/hipeoplea/lb_lr1/actions/runs/36703636564). Задачи Tests, SAST и SCA завершились успешно.
 
-![SCA - OWASP Dependency-Check](docs/screenshots/SCA.png)
+Ранее SCA-анализ обнаружил уязвимую зависимость `tomcat-embed-core:11.0.24`. Для обновления в `pom.xml` задано свойство `<tomcat.version>11.0.26</tomcat.version>`; после отправки этого изменения указанный запуск CI прошёл. В workflow настроен порог `failBuildOnCVSS=7.0`: успех SCA означает отсутствие находок, блокирующих сборку по этому порогу, а не полное отсутствие любых уязвимостей.
+
+**SAST — SpotBugs.** На снимке лога показаны `BugInstance size is 0`, отсутствие ошибок и предупреждений и `BUILD SUCCESS`. HTML-отчёт сохраняется в артефакте `spotbugs-sast-report`.
+
+![Лог SpotBugs: ноль обнаруженных ошибок и успешное завершение](docs/screenshots/SAST.png)
+
+*Рисунок 1 — результат статического анализа SpotBugs в GitHub Actions.*
+
+**SCA — OWASP Dependency-Check.** На снимке лога показаны завершение анализа зависимостей, создание HTML-отчёта и `BUILD SUCCESS`. Сам снимок не показывает число находок ниже порога CVSS 7.0. HTML-отчёт сохраняется в артефакте `dependency-check-sca-report`.
+
+![Лог OWASP Dependency-Check: анализ завершён и сборка успешна](docs/screenshots/SCA.png)
+
+*Рисунок 2 — результат проверки зависимостей OWASP Dependency-Check в GitHub Actions.*
