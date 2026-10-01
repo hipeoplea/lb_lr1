@@ -122,3 +122,9 @@ API возвращает JSON и не формирует HTML-страницы. 
 Spring Security работает без HTTP-сессии. Открыты только `/auth/register` и `/auth/login`; остальные адреса требуют Bearer JWT. OAuth2 Resource Server проверяет подпись, срок действия и `issuer`. Контроллер получает подтверждённого пользователя из токена, а сервис создаёт и читает записи только этого пользователя. Клиент не передаёт владельца записи в запросе.
 
 ## Отчёты SAST и SCA из Actions
+Отчет SAST:
+
+![SAST - SpotBugs](docs/screenshots/SAST.png)  
+Отчет SCA:
+
+![SCA - OWASP Dependency-Check](docs/screenshots/SCA.png)
